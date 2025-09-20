@@ -6,7 +6,7 @@
 This scaffold provides a production-minded customer module with:
 
 
-- Clear package structure (internal/pkg)
+- Clear package structure (src)
 - Repository using `sqlx` and Postgres
 - Service layer with optimistic locking
 - HTTP handlers using `chi`
