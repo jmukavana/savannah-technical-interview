@@ -3,7 +3,7 @@ package Customer
 import "errors"
 
 var (
-	ErrorNotFound       = errors.New("Customer Not Found!")
-	ErrorConflict       = errors.New("Customer Already Exist!")
-	ErrorInvalidPayload = errors.New("Invalid Paylod!")
+	ErrorNotFound       = errors.New("customer not found")
+	ErrorConflict       = errors.New("customer already exist")
+	ErrorInvalidPayload = errors.New("invalid payload")
 )

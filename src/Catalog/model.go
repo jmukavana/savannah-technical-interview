@@ -15,7 +15,9 @@ type Category struct {
 	ParentID    *uuid.UUID `db:"parent_id" json:"parent_id,omitempty"`
 	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
 	UpdatedAt   time.Time  `db:"updated_at" json:"updated_at"`
+	Version int `db:"version" json:"version"` 
 }
+const CategoryName = "categories";
 
 type Product struct {
 	ID          uuid.UUID       `db:"id" json:"id"`
@@ -27,4 +29,6 @@ type Product struct {
 	Currency    string          `db:"currency" json:"currency"`
 	CreatedAt   time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt   time.Time       `db:"updated_at" json:"updated_at"`
+	Version int `db:"version" json:"version"` 
 }
+const ProductName="products"
