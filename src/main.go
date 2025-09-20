@@ -2,32 +2,34 @@ package main
 
 import (
 	"context"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
-	"savannah/src/Billing"
-	"savannah/src/Catalog"
-	"savannah/src/Customer"
-	"savannah/src/Inventory"
-	"savannah/src/Logger"
-	"savannah/src/Orders"
-	"savannah/src/Storage"
-
 	"github.com/go-chi/chi/v5"
 	_ "github.com/lib/pq"
 	"go.uber.org/zap"
+	"savannah/src/Catalog"
+	"savannah/src/Customer"
+	"savannah/src/Logger"
+	"savannah/src/Storage"
 )
 
-// main is the entry point for the program.
-//
-// It sets up a logger, opens a Postgres database connection,
-// creates a customer repository and service, and sets up a
-// HTTP handler using Chi.
-//
-// It also sets up a graceful shutdown mechanism using a
-// context and a quit channel.
+// @title           Catalog API
+// @version         1.0
+// @description     API documentation for Catalog service (products & categories).
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.email  support@example.com
+
+// @license.name  MIT
+// @license.url   https://opensource.org/licenses/MIT
+
+// @host      localhost:8080
+// @BasePath  /api/v1
 func main() {
 	log := Logger.New()
 	defer log.Sync()
@@ -45,46 +47,39 @@ func main() {
 	defer db.Close()
 
 	// repos
-	catRepo := Catalog.NewRepository(db, log)
-	invRepo := Inventory.NewRepository(db, log)
-	ordersRepo := Orders.NewRepository(db, log)
-	billingRepo := Billing.NewRepository(db, log)
-	customerRepo := Customer.NewRepository(db, log)
+	customerRepository := Customer.NewRepository(db, log)
+	productRepository := Catalog.NewRepository(db, log)
 
 	// services
-	invSvc := Inventory.NewService(invRepo, db, log)
-	ordersSvc := Orders.NewService(ordersRepo, db, invSvc, log)
-	no := &billing.NoopProvider{}
-	billingSvc := Billing.NewService(billingRepo, no, log)
-	customerSvc := Customer.NewService(customerRepo, log)
-	h := Customer.NewHandler(customerSvc, log)
+	customerService := Customer.NewService(customerRepository, log)
+	productService := Catalog.NewService(productRepository, log)
+
+	// handler
+	customerHandler := Customer.NewHandler(customerService, log)
+	productHandler := Catalog.NewHandler(productService, log)
 
 	r := chi.NewRouter()
 	r.Use(Logger.ChiMiddleware(log))
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	r.Route("/api/v1/customers", func(r chi.Router) {
-		r.Get("/", h.List)
-		r.Post("/", h.Create)
-		r.Get("/{id}", h.Get)
-		r.Put("/{id}", h.Update)
-		r.Delete("/{id}", h.Delete)
+		r.Get("/", customerHandler.List)
+		r.Post("/", customerHandler.Create)
+		r.Get("/{id}", customerHandler.Get)
+		r.Put("/{id}", customerHandler.Update)
+		r.Delete("/{id}", customerHandler.Delete)
 	})
-	r.Route("/api/v1/orders", func(r chi.Router) {
-		r.Post("/", ordersSvc.Create))
-		r.Get("/", ordersSvc.List)
-		r.Get("/{id}", ordersSvc.Get)
-		r.Put("/{id}", ordersSvc.Update)
-		r.Delete("/{id}", ordersSvc.Delete)
+	r.Route("/api/v1/categories", func(r chi.Router) {
+		r.Post("/", productHandler.CreateCategory)
+		r.Get("/{id}", productHandler.GetCategory)
 	})
-	r.Route("/api/v1/invoices", func(r chi.Router) {
-		r.Post("/", billingSvc.Create)
-		r.Get("/", billingSvc.List)
-		r.Get("/{id}", billingSvc.Get)
-		r.Put("/{id}", billingSvc.Update)
-		r.Delete("/{id}", billingSvc.Delete)
+	r.Route("/api/v1/products", func(r chi.Router) {
+		r.Post("/", productHandler.CreateProduct)
+		r.Get("/", productHandler.ListProducts)
+		r.Get("/{id}", productHandler.GetCategory)
 	})
 
-	srv := &http.Server{
+	server := &http.Server{
 		Addr:    ":8080",
 		Handler: r,
 	}
@@ -94,8 +89,8 @@ func main() {
 	signal.Notify(quit, os.Interrupt)
 
 	go func() {
-		log.Sugar().Infof("starting server on %s", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Sugar().Infof("starting server on %s", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("listen", zap.Error(err))
 		}
 	}()
@@ -105,7 +100,7 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(ctx); err != nil {
 		log.Fatal("server forced to shutdown", zap.Error(err))
 	}
 

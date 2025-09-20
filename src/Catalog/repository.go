@@ -15,9 +15,11 @@ import (
 type Repository interface {
 	CreateCategory(ctx context.Context, c *Category) error
 	GetCategory(ctx context.Context, id uuid.UUID) (*Category, error)
+
 	CreateProduct(ctx context.Context, p *Product) error
+
 	GetProduct(ctx context.Context, id uuid.UUID) (*Product, error)
-	ListProducts(ctx context.Context, limit, offset int, search string) ([]Product, error)
+	ListProducts(ctx context.Context, q ListProductsQuery) ([]Product, error)
 }
 
 type repository struct {
@@ -31,27 +33,37 @@ func NewRepository(db *sqlx.DB, log *zap.Logger) Repository {
 
 func (r *repository) CreateCategory(ctx context.Context, c *Category) error {
 	c.ID = uuid.New()
-	c.CreatedAt = time.Now().Local().UTC()
-	c.UpdatedAt = c.CreatedAt
+	now := time.Now().UTC()
+	c.CreatedAt = now
+	c.UpdatedAt = now
+	c.Version = 1
+	query := fmt.Sprintf(
+		`INSERT INTO %s (id,name,slug,description,parent_id,created_at,updated_at,version)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, CategoryName)
 	_, err := r.db.ExecContext(
 		ctx,
-		`INSERT INTO categories (id,name,slug,description,parent_id,created_at,updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		c.ID, c.Name, c.Slug, c.Description, c.ParentID, c.CreatedAt, c.UpdatedAt)
+		query,
+		c.ID, c.Name, c.Slug, c.Description, c.ParentID, c.CreatedAt, c.UpdatedAt, c.Version)
 	return err
 }
 
 // CreateProduct implements Repository.
 func (r *repository) CreateProduct(ctx context.Context, p *Product) error {
 	p.ID = uuid.New()
-	p.CreatedAt = time.Now().Local().UTC()
-	p.UpdatedAt = p.CreatedAt
-	_, err := r.db.ExecContext(
-		ctx,
-		`INSERT INTO products (id,sku,name,description,category_id,price,currency,created_at,updated)
-		VALUES($1,$2,$3,$4,$5,$6,$7,&8,&9)`,
-		p.ID, p.SKU, p.Name, p.Description, p.CategoryID, p.Price, p.Currency, p.CreatedAt, p.UpdatedAt)
+	now := time.Now().UTC()
+	p.CreatedAt = now
+	p.UpdatedAt = now
+	p.Version = 1
 
+	query := fmt.Sprintf(`
+	INSERT INTO %s 
+	(id, sku, name, description, category_id, price, currency, created_at, updated_at, version)
+	VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, ProductName)
+
+	_, err := r.db.ExecContext(ctx, query,
+		p.ID, p.SKU, p.Name, p.Description, p.CategoryID,
+		p.Price, p.Currency, p.CreatedAt, p.UpdatedAt, p.Version,
+	)
 	return err
 }
 
@@ -59,13 +71,15 @@ func (r *repository) CreateProduct(ctx context.Context, p *Product) error {
 
 func (r *repository) GetCategory(ctx context.Context, id uuid.UUID) (*Category, error) {
 	var category Category
+	query := fmt.Sprintf(`SELECT id,name,slug,description,parent_id,created_at,updated_at,version 
+		FROM %s WHERE id=$1`, CategoryName)
+
 	err := r.db.GetContext(
 		ctx,
 		&category,
-		`SELECT id,name,slug,description,parent_id,created_at,updated_at 
-		FROM categories WHERE id=$1`, id)
+		query, id)
 	if err == sql.ErrNoRows {
-		return nil, sql.ErrNoRows
+		return nil, CategoryErrorNotFound
 	}
 	return &category, err
 }
@@ -73,36 +87,32 @@ func (r *repository) GetCategory(ctx context.Context, id uuid.UUID) (*Category, 
 // GetProduct implements Repository.
 func (r *repository) GetProduct(ctx context.Context, id uuid.UUID) (*Product, error) {
 	var product Product
+	query := fmt.Sprintf(`SELECT id,sku,name,description,category_id,price,currency,created_at,updated_at,version
+		FROM %s WHERE id=$1`, ProductName)
 	err := r.db.GetContext(
 		ctx,
 		&product,
-		`SELECT id,sku,name,description,category_id,price,currency,created_at,updated_at
-		FROM products WHERE id=$1`, id)
+		query, id)
 	if err == sql.ErrNoRows {
-		return nil, sql.ErrNoRows
+		return nil, ProductErrorNotFound
 	}
 	return &product, err
 }
 
 // ListProducts implements Repository.
-func (r *repository) ListProducts(ctx context.Context, limit, offset int, search string) ([]Product, error) {
-	query := `SELECT id,sku,name,description,category_id,price,currency,created_at,updated_at FROM products WHERE 1=1`
+func (r *repository) ListProducts(ctx context.Context, q ListProductsQuery) ([]Product, error) {
+	base := fmt.Sprintf(`SELECT id,sku,name,description,category_id,price,currency,created_at,updated_at,version FROM %s WHERE 1=1`, ProductName)
 	args := []interface{}{}
 	idx := 1
-	if search != "" {
-		query += ` AND (name ILIKE $` + itoa(idx) + ` OR sku ILIKE $` + itoa(idx+1) + ` )`
-		args = append(args, "%"+search+"%", "%"+search+"%")
+	if q.Search != "" {
+		base += fmt.Sprintf(" AND (name ILIKE $%d OR sku ILIKE $%d)", idx, idx+1)
+		args = append(args, "%"+q.Search+"%", "%"+q.Search+"%")
 		idx += 2
 	}
-	query += ` ORDER BY created_at DESC LIMIT $` + itoa(idx) + ` OFFSET $` + itoa(idx+1)
-	args = append(args, limit, offset)
-	var res []Product
-	if err := r.db.SelectContext(ctx, &res, query, args...); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
+	base += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", idx, idx+1)
+	args = append(args, q.Limit, q.Offset)
 
-func itoa(i int) string {
-	return fmt.Sprintf("%d", i)
+	products := []Product{}
+	err := r.db.SelectContext(ctx, &products, base, args...)
+	return products, err
 }
