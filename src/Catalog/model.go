@@ -15,9 +15,10 @@ type Category struct {
 	ParentID    *uuid.UUID `db:"parent_id" json:"parent_id,omitempty"`
 	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
 	UpdatedAt   time.Time  `db:"updated_at" json:"updated_at"`
-	Version int `db:"version" json:"version"` 
+	Version     int        `db:"version" json:"version"`
 }
-const CategoryName = "categories";
+
+const CategoryTableName = "categories"
 
 type Product struct {
 	ID          uuid.UUID       `db:"id" json:"id"`
@@ -29,6 +30,37 @@ type Product struct {
 	Currency    string          `db:"currency" json:"currency"`
 	CreatedAt   time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt   time.Time       `db:"updated_at" json:"updated_at"`
-	Version int `db:"version" json:"version"` 
+	Version     int             `db:"version" json:"version"`
 }
-const ProductName="products"
+
+const ProductTableName = "products"
+
+// ToResponse converts Product to ProductResponse
+func (p *Product) ToResponse() ProductResponse {
+	return ProductResponse{
+		ID:          p.ID,
+		SKU:         p.SKU,
+		Name:        p.Name,
+		Description: p.Description,
+		CategoryID:  p.CategoryID,
+		Price:       p.Price,
+		Currency:    p.Currency,
+		CreatedAt:   p.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   p.UpdatedAt.Format(time.RFC3339),
+		Version:     p.Version,
+	}
+}
+
+// ToResponse converts Category to CategoryResponse
+func (c *Category) ToResponse() CategoryResponse {
+	return CategoryResponse{
+		ID:          c.ID,
+		Name:        c.Name,
+		Slug:        c.Slug,
+		Description: c.Description,
+		ParentID:    c.ParentID,
+		CreatedAt:   c.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   c.UpdatedAt.Format(time.RFC3339),
+		Version:     c.Version,
+	}
+}

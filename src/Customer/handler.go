@@ -98,7 +98,6 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.writeError(w, http.StatusInternalServerError, "failed to update")
-	return
 }
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")

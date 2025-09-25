@@ -1,9 +1,11 @@
 {
     "cSpell.words": [
         "gorm",
+        "ILIKE",
         "Infof",
         "jmoiron",
         "shopspring",
-        "sqlx"
+        "sqlx",
+        "zaptest"
     ]
 }
